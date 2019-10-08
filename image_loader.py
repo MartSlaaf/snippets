@@ -86,8 +86,14 @@ def load_images_folder(images_path, useful_ids=None, part_to_load=None, reshape_
 
     # crop circle of interest
     if circle_crop is not None:
-        center_x = circle_crop['center'][0] * images.shape[1]
-        center_y = circle_crop['center'][1] * images.shape[2]
+        if isinstance(circle_crop['center'][0], int):
+            center_x = circle_crop['center'][0]
+        else:
+            center_x = circle_crop['center'][0] * images.shape[1]
+        if isinstance(circle_crop['center'][1], int):
+            center_y = circle_crop['center'][1]
+        else:
+            center_y = circle_crop['center'][1] * images.shape[2]
         radius = circle_crop['radius'] * min(images.shape[1:])
 
         left_x = int(center_x - radius)
