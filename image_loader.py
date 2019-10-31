@@ -4,7 +4,57 @@ import os
 from glob import glob as glob
 
 
-def load_images_folder(images_path, useful_ids=None, part_to_load=None, reshape_to=None, rescale_intensity=None, normalize_intensities_overall=False, slicing_axis=0, circle_crop=None, progressbar=None):
+def get_sigmed_outliers_iterative(v, alpha=3, max_i=5, window=None):
+    o = np.zeros_like(v)
+    small_window = max(10, int(window/10))
+
+    corrected = deepcopy(v)
+    for i in range(max_i):
+        # gain median filtered values
+        filtered = pd.Series(corrected).rolling(window, center=True).median()
+        filtered_small = pd.Series(corrected).rolling(small_window, center=True).median()
+        filtered[filtered.isna()] = filtered_small[filtered.isna()]
+        filtered = filtered.fillna(filtered.mean())
+        # substract median filtered values
+        centered = corrected - filtered
+        # detect and accumulate sigma-outliers
+        s = centered.std()
+        current_outliers = np.logical_or(centered<-alpha*s, centered>+alpha*s).astype(int)
+        current_outliers[:small_window] = 0
+        current_outliers[-small_window:] = 0
+        o = np.stack([current_outliers, o]).max(0)
+        # replace sigma-outliers with filtered values
+        corrected[current_outliers==1] = filtered[current_outliers==1]
+
+    return o, corrected
+
+
+def correct_stack_outliers(images):
+    curr_means = images.reshape(images.shape[0], -1).mean(-1)
+    curr_stds = images.reshape(images.shape[0], -1).std(-1)
+    o_means, corr_means = get_sigmed_outliers_iterative(curr_means, 3, window=80, max_i=30)
+    o_stds, corr_stds = get_sigmed_outliers_iterative(curr_stds, 3, window=80, max_i=30)
+    o_max = np.stack([o_means, o_stds]).max(0)
+
+    c_m = (o_means==1)
+    c_s = (o_stds==1)
+    c_a = (o_max==1)
+
+    # turn all means to zero
+    images[c_a] -= curr_means[c_a, None, None]
+    # correct selected standard deviations
+    images[c_s] /= curr_stds[c_s, None, None]
+    images[c_s] *= corr_stds[c_s, None, None]
+    # return means to the corrected values
+    images[c_a] += corr_means[c_a, None, None]
+
+    return images
+
+
+def load_images_folder(images_path, useful_ids=None, part_to_load=None, reshape_to=None,
+                       rescale_intensity=None, normalize_intensities_overall=False, fit_outliers=False,
+                       slicing_axis=0, circle_crop=None,
+                       progressbar=None):
     """
     Loading pack of images from the folder.
     Args:
@@ -77,6 +127,10 @@ def load_images_folder(images_path, useful_ids=None, part_to_load=None, reshape_
         images = np.swapaxes(images, 0, slicing_axis)
         if useful_ids is not None:
             images = images[useful_ids]
+
+    # return outliers to the neighbours level
+    if fit_outliers:
+        images = correct_stack_outliers(images)
 
     # normalize overall intensities
     if normalize_intensities_overall:
