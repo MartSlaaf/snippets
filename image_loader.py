@@ -94,7 +94,7 @@ def load_images_folder(images_path, useful_ids=None, part_to_load=None, reshape_
             center_y = circle_crop['center'][1]
         else:
             center_y = circle_crop['center'][1] * images.shape[2]
-        radius = circle_crop['radius'] * min(images.shape[1:])
+        radius = circle_crop['radius'] * min(images.shape[1:]) // 2
 
         left_x = int(center_x - radius)
         right_x = int(center_x + radius)
