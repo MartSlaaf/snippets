@@ -2,6 +2,8 @@ import skimage
 import numpy as np
 import os
 from glob import glob as glob
+import pandas as pd
+from copy import deepcopy
 
 
 def get_sigmed_outliers_iterative(v, alpha=3, max_i=5, window=None):
@@ -52,7 +54,7 @@ def correct_stack_outliers(images):
 
 
 def load_images_folder(images_path, useful_ids=None, part_to_load=None, reshape_to=None,
-                       rescale_intensity=None, normalize_intensities_overall=False, fit_outliers=False,
+                       rescale_intensity=None, normalize_intensities_overall=False, normalize_intensities_individually=False, fit_outliers=False,
                        slicing_axis=0, circle_crop=None,
                        progressbar=None):
     """
@@ -137,6 +139,11 @@ def load_images_folder(images_path, useful_ids=None, part_to_load=None, reshape_
         filtered_images = images[np.logical_and(images > np.percentile(images, 5), images < np.percentile(images, 95))]
         overall_mean, overall_var = filtered_images.mean(), filtered_images.std()
         images = (images - overall_mean)/overall_var
+
+    # normalize intensity of each picture individually
+    if normalize_intensities_individually:
+        images -= images.reshape(images.shape[0], -1).mean(-1)[:, None, None]
+        images /= images.reshape(images.shape[0], -1).std(-1)[:, None, None]
 
     # crop circle of interest
     if circle_crop is not None:
